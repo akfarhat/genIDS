@@ -1,4 +1,5 @@
 import random
+import numbers
 
 from deap import base
 from deap import creator
@@ -8,18 +9,29 @@ import arff
 
 # Parameters ##############################
 
-trainset_file = 'KDDTrain_5Percent.arff'
+trainset_file = 'KDDTrain_500.arff'
 ruleset_file = 'ruleset'
+testset_file = 'KDDTest-21_1000.arff'
 weight_support = 1 
 weight_confidence = 0
-NGEN = 10
+NGEN = 50
 CXPB = 0.8
 MUTPB = 0.1
 NPOP = 100
+NTEST = 100
 
 ###########################################
 
+# Util functions ##########################
+
+def equal_real(a, b):
+    return abs(a - b) <= 0.01
+
+##########################################
+
 # Set up GA ##############################
+
+print 'Setting up GA...'
 
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMax)
@@ -29,12 +41,19 @@ data = arff.load(open(trainset_file,'rb'))
 randomizers = {}
 
 for (attribute, values) in data['attributes']:
-    if isinstance(values, basestring):
+    if (attribute in ('duration','src_bytes','dst_bytes') or
+        attribute.startswith('num') or
+        attribute.endswith('count')):
+        randomizers[attribute] = lambda: random.randint(0,10000)
+    elif attribute.endswith('rate'):
         if values == 'REAL':
-            randomizers[attribute] = lambda: random.uniform(0, 100000)
+            randomizers[attribute] = lambda: round(random.random(),2)
+    elif isinstance(values, basestring):
+        if values == 'REAL':
+            randomizers[attribute] = lambda: round(random.uniform(0, 10),2)
 
     if isinstance(values, list):
-        randomizers[attribute] = lambda: random.choice(values)
+        randomizers[attribute] = lambda v=values: random.choice(v)
 
 def random_value(i):
     return randomizers[data['attributes'][i][0]]()
@@ -71,8 +90,13 @@ def evaluate(individual):
         matched_fields = 0.0
 
         for index, field in enumerate(record, start=0):
-            if (individual[index] == field):
-                matched_fields += 1.0
+            if isinstance(field, basestring):
+                if individual[index] == field:
+                    matched_fields += 1.0
+            elif isinstance(field, numbers.Number):
+                if equal_real(individual[index], field):
+                    matched_fields += 1.0
+
             if index == ind_size-2 and matched_fields == ind_size-1: 
                 A += 1
             if index == ind_size-1 and matched_fields == ind_size:
@@ -101,7 +125,9 @@ toolbox.register('mutate', mutate, mut_threshold=MUTPB)
 
 ####################################################
 
-# Run Evolution ###################################
+# Training #########################################
+
+print 'Beginning training...'
 
 pop = toolbox.population(n=NPOP)
 fitnesses = toolbox.map(toolbox.evaluate, pop)
@@ -109,6 +135,9 @@ for ind, fit in zip(pop, fitnesses):
     ind.fitness.values = fit
 
 for g in range(NGEN):
+    if g % 10 == 0:
+        print 'Generation {}'.format(g)
+
     offspring = toolbox.select(pop, len(pop))
     offspring = map(toolbox.clone, offspring)
 
@@ -130,9 +159,62 @@ for g in range(NGEN):
 
     pop[:] = offspring
 
+ruleset = pop
+
 f = open(ruleset_file, 'w')
-for individual in pop:
-    f.write(','.join(individual))
+for rule in ruleset:
+    f.write(','.join(map(str,rule)))
     f.write('\n')
 
-########################################################
+####################################################
+
+# Testing ##########################################
+
+print 'Beginning testing...'
+
+def equal_connection(a, b):
+    for x,y in zip(a,b):
+        if isinstance(x, basestring):
+            if x != y:
+                return False
+        elif isinstance(x, numbers.Number):
+            if not equal_real(x,y):
+                return False
+
+    return True
+
+
+test_data = arff.load(open(testset_file,'rb'))
+tests_to_run = random.sample(test_data['data'], NTEST)
+
+n = len(tests_to_run)
+n_attacks = len([test for test in tests_to_run if test[-1] == 'anomaly'])
+
+assert n >= 0
+assert n_attacks >= 0
+
+n_positive = 0
+n_false = 0
+n_miss = 0
+
+for test in tests_to_run:
+    found = False
+
+    for rule in ruleset:
+        if equal_connection(rule, test):
+            if test[-1] == 'anomaly':
+                n_positive += 1
+                found = True
+                break
+            else:
+                n_false += 1
+
+    if not found:
+        if test[-1] == 'anomaly':
+            n_miss += 1
+
+print 'Total Tests = {}'.format(n)
+print 'Total Attacks = {}'.format(n_attacks)
+print 'Num Attacks Detected = {} ({}%)'.format(n_positive, float(n_positive)/float(n_attacks)*100)
+print 'Num Attacks Missed = {} ({}%)'.format(n_miss, float(n_miss)/float(n_attacks)*100)
+print 'Num False Positives = {}'.format(n_false)
