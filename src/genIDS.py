@@ -8,13 +8,14 @@ import arff
 
 # Parameters ##############################
 
-filename = 'KDDTrain+_20Percent.arff'
+trainset_file = 'KDDTrain_5Percent.arff'
+ruleset_file = 'ruleset'
 weight_support = 1 
 weight_confidence = 0
-NGEN = 100
+NGEN = 10
 CXPB = 0.8
 MUTPB = 0.1
-NPOP = 1000
+NPOP = 100
 
 ###########################################
 
@@ -23,7 +24,7 @@ NPOP = 1000
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMax)
 
-data = arff.load(open(filename,'rb'))
+data = arff.load(open(trainset_file,'rb'))
 
 randomizers = {}
 
@@ -34,6 +35,9 @@ for (attribute, values) in data['attributes']:
 
     if isinstance(values, list):
         randomizers[attribute] = lambda: random.choice(values)
+
+def random_value(i):
+    return randomizers[data['attributes'][i][0]]()
 
 def random_chromosome():
     chromosome = []
@@ -57,13 +61,13 @@ toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
 # fitness function to evaluate individual
 def evaluate(individual):
-    N = float(len(data.data))
+    N = float(len(data['data']))
     A = 0.0
     AB = 0.0
     w1 = weight_support
     w2 = weight_confidence
 
-    for record in data.data:
+    for record in data['data']:
         matched_fields = 0.0
 
         for index, field in enumerate(record, start=0):
@@ -85,10 +89,15 @@ def evaluate(individual):
 
     return fitness,
 
+def mutate(individual, mut_threshold):
+    for i, attribute in enumerate(individual):
+        if random.random() < mut_threshold:
+            individual[i] = random_value(i)
+
 toolbox.register('evaluate', evaluate)
 toolbox.register('select', tools.selTournament, tournsize=3)
 toolbox.register('crossover', tools.cxTwoPoint)
-toolbox.register('mutate', tools.mutGaussian, mu=0, sigma=1, indpb=0.2)
+toolbox.register('mutate', mutate, mut_threshold=MUTPB)
 
 ####################################################
 
@@ -120,5 +129,10 @@ for g in range(NGEN):
         ind.fitness.values = fit
 
     pop[:] = offspring
+
+f = open(ruleset_file, 'w')
+for individual in pop:
+    f.write(','.join(individual))
+    f.write('\n')
 
 ########################################################
