@@ -14,10 +14,10 @@ ruleset_file = 'ruleset'
 testset_file = 'KDDTest-21_1000.arff'
 weight_support = 1 
 weight_confidence = 0
-NGEN = 50
+NGEN = 10
 CXPB = 0.8
 MUTPB = 0.1
-NPOP = 100
+NPOP = 1000
 NTEST = 100
 
 ###########################################
@@ -41,10 +41,10 @@ data = arff.load(open(trainset_file,'rb'))
 randomizers = {}
 
 for (attribute, values) in data['attributes']:
-    if (attribute in ('duration','src_bytes','dst_bytes') or
+    if (attribute in ('duration', 'src_bytes', 'dst_bytes') or
         attribute.startswith('num') or
         attribute.endswith('count')):
-        randomizers[attribute] = lambda: random.randint(0,10000)
+        randomizers[attribute] = lambda: random.randint(0,10000) if random.random() < 0.2 else 0
     elif attribute.endswith('rate'):
         if values == 'REAL':
             randomizers[attribute] = lambda: round(random.random(),2)
@@ -135,8 +135,7 @@ for ind, fit in zip(pop, fitnesses):
     ind.fitness.values = fit
 
 for g in range(NGEN):
-    if g % 10 == 0:
-        print 'Generation {}'.format(g)
+    print 'Generation {}'.format(g)
 
     offspring = toolbox.select(pop, len(pop))
     offspring = map(toolbox.clone, offspring)
