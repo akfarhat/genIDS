@@ -4,26 +4,49 @@ from deap import base
 from deap import creator
 from deap import tools
 
+import arff
+
+filename = 'KDDTrain+_20Percent.arff'
+
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMax)
 
-IND_SIZE = 10
+data = arff.load(open(filename,'rb'))
 
-protocol_type = ['tcp','udp', 'icmp'] 
-service = ['aol', 'auth', 'bgp', 'courier', 'csnet_ns', 'ctf', 'daytime', 'discard', 'domain', 
-           'domain_u', 'echo', 'eco_i', 'ecr_i', 'efs', 'exec', 'finger', 'ftp', 'ftp_data', 
-           'gopher', 'harvest', 'hostnames', 'http', 'http_2784', 'http_443', 'http_8001', 
-           'imap4', 'IRC', 'iso_tsap', 'klogin', 'kshell', 'ldap', 'link', 'login', 'mtp', 
-           'name', 'netbios_dgm', 'netbios_ns', 'netbios_ssn', 'netstat', 'nnsp', 'nntp', 
-           'ntp_u', 'other', 'pm_dump', 'pop_2', 'pop_3', 'printer', 'private', 'red_i', 
-           'remote_job', 'rje', 'shell', 'smtp', 'sql_net', 'ssh', 'sunrpc', 'supdup', 'systat', 
-           'telnet', 'tftp_u', 'tim_i', 'time', 'urh_i', 'urp_i', 'uucp', 'uucp_path', 'vmnet', 
-           'whois', 'X11', 'Z39_50'] 
-flag = ['OTH', 'REJ', 'RSTO', 'RSTOS0', 'RSTR', 'S0', 'S1', 'S2', 'S3', 'SF', 'SH']
+randomizers = {}
+
+for (attribute, values) in data['attributes']:
+    # class is used to tell whether a record is normal or an anomaly
+    if attribute == 'class':
+        continue
+
+    if isinstance(values, basestring):
+        if values == 'REAL':
+            randomizers[attribute] = lambda: random.uniform(0, 100000)
+
+    if isinstance(values, list):
+        randomizers[attribute] = lambda: random.choice(values)
+
+def random_chromosome():
+    chromosome = []
+
+    for (attribute, _) in data['attributes']:
+        if attribute == 'class':
+            continue
+
+        chromosome.append(randomizers[attribute])
+
+    return chromosome
+
+def empty_chromosome():
+    return []
+
+ind_size = len(randomizers.keys())
 
 toolbox = base.Toolbox()
-toolbox.register("attr_bool", random.getrandbits(1)) 
-toolbox.register("attr_int", 
-toolbox.register("attr_float", random.random)
-toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, n=IND_SIZE)
+toolbox.register('attr_empty_chromosome', empty_chromosome)
+toolbox.register('attr_rand_chromosome', random_chromosome)
+toolbox.register("empty_individual", tools.initIterate, creator.Individual, toolbox.attr_empty_chromosome, n=ind_size)
+toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.attr_rand_chromosome, n=ind_size)
+toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
