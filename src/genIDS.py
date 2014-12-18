@@ -9,15 +9,16 @@ import arff
 
 # Parameters ##############################
 
-trainset_file = 'KDDTrain_500.arff'
+trainset_file = 'KDDTrain+_20Percent.arff'
 ruleset_file = 'ruleset'
-testset_file = 'KDDTest-21_1000.arff'
+testset_file = 'KDDTest-21.arff'
 weight_support = 1 
 weight_confidence = 0
 NGEN = 10
 CXPB = 0.8
 MUTPB = 0.1
-NPOP = 1000
+NPOP = 100
+NTRAIN = 500
 NTEST = 100
 
 ###########################################
@@ -37,6 +38,7 @@ creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMax)
 
 data = arff.load(open(trainset_file,'rb'))
+train_data = random.sample(data['data'], NTRAIN)
 
 randomizers = {}
 
@@ -86,7 +88,7 @@ def evaluate(individual):
     w1 = weight_support
     w2 = weight_confidence
 
-    for record in data['data']:
+    for record in train_data:
         matched_fields = 0.0
 
         for index, field in enumerate(record, start=0):
